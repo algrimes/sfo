@@ -1,0 +1,64 @@
+name: Build macOS Universal Binary
+
+on:
+  push:
+    branches:
+      - 'master'
+  release:
+    types: [published]  # Trigger on published release
+
+jobs:
+  build-universal-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          brew update
+          brew install cmake ninja
+
+      - name: Configure Build for x86_64
+        run: |
+          mkdir -p build_x86_64
+          cd build_x86_64
+          cmake .. -DCMAKE_BUILD_TYPE=Release -G "Ninja" \
+                   -DCMAKE_OSX_ARCHITECTURES="x86_64"
+
+      - name: Build Project for x86_64
+        run: |
+          cd build_x86_64
+          cmake --build .
+
+      - name: Configure Build for arm64
+        run: |
+          mkdir -p build_arm64
+          cd build_arm64
+          cmake .. -DCMAKE_BUILD_TYPE=Release -G "Ninja" \
+                   -DCMAKE_OSX_ARCHITECTURES="arm64"
+
+      - name: Build Project for arm64
+        run: |
+          cd build_arm64
+          cmake --build .
+
+      - name: Combine the binaries into a universal binary
+        run: |
+          mkdir -p artifacts
+          lipo -create -output artifacts/sfo-macos-universal \
+            build_x86_64/bin/sfo \
+            build_arm64/bin/sfo
+
+      - name: Verify Universal Binary
+        run: |
+          file artifacts/sfo-macos-universal
+
+      - name: Upload Release Artifact
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/sfo-macos-universal
+          name: sfo-macos-universal
+          token: ${{ secrets.GITHUB_TOKEN }}
